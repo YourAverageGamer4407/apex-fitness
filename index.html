@@ -255,6 +255,20 @@
 
   <div class="kpi" id="runKpis"></div>
 
+  <div class="card" id="runBreakdownCard">
+    <h3>This week's remaining miles</h3>
+    <div class="row" style="margin-bottom:10px;">
+      <div><label>Tempo run day</label>
+        <select id="tempoDay"><option value="1">Mon</option><option value="2">Tue</option><option value="3" selected>Wed</option><option value="4">Thu</option><option value="5">Fri</option><option value="6">Sat</option><option value="0">Sun</option></select>
+      </div>
+      <div><label>Long run day</label>
+        <select id="longDay"><option value="1">Mon</option><option value="2">Tue</option><option value="3">Wed</option><option value="4">Thu</option><option value="5">Fri</option><option value="6" selected>Sat</option><option value="0">Sun</option></select>
+      </div>
+      <div style="flex:0"><label>&nbsp;</label><button class="btn sm sec" id="saveRunDays">Save</button></div>
+    </div>
+    <div id="runBreakdown"></div>
+  </div>
+
   <div class="card">
     <h3>Weekly mileage progression</h3>
     <div class="small" style="margin-bottom:8px;">Auto-calculated: starts at 12 mi/week, increases ~10% each week. Morning PT miles count toward your week.</div>
@@ -848,9 +862,55 @@ function renderMileageProgression(){
     </div>`;
   }).join('');
 }
+// ---------- Remaining-mileage breakdown (tempo + long run) ----------
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function getRunDays(){
+  if(!DB.runDays){ DB.runDays = { tempo: 3, long: 6 }; } // default Wed tempo, Sat long
+  return DB.runDays;
+}
+function computeRunBreakdown(){
+  const goal = getWeeklyGoal();
+  const thisWeek = mondayOf(new Date());
+  const done = DB.runs.filter(r=>mondayOf(r.date)===thisWeek)
+                      .reduce((a,r)=>a + +r.miles + (+r.extra||0), 0);
+  const remaining = Math.max(0, Math.round((goal - done)*10)/10);
+  // tempo = shorter/faster (~40%), long run = the rest (~60%), rounded to 0.5
+  const tempo = Math.round(remaining * 0.4 * 2) / 2;
+  const long  = Math.round((remaining - tempo) * 2) / 2;
+  return { goal: Math.round(goal*10)/10, done: Math.round(done*10)/10, remaining, tempo, long };
+}
+function renderRunBreakdown(){
+  const el = document.getElementById('runBreakdown');
+  if(!el) return;
+  const days = getRunDays();
+  const b = computeRunBreakdown();
+  const todayDow = new Date().getDay();
+  const dayChip = (dow)=>{
+    if(dow===todayDow) return ' <span class="chip up">TODAY</span>';
+    return '';
+  };
+  let html = `<div class="small" style="margin-bottom:8px;">Week goal <b>${b.goal} mi</b> · run so far <b>${b.done} mi</b> · <b style="color:var(--warn);">${b.remaining} mi left</b></div>`;
+  if(b.remaining <= 0){
+    html += `<div class="rec">✓ Week complete — you hit ${b.done} of ${b.goal} miles. No tempo or long run owed. Log anything else as Extra.</div>`;
+  } else {
+    html += `<div class="row">`
+      + `<div class="card" style="margin:0; border-color:var(--warn);"><div class="small">TEMPO (${DAY_NAMES[days.tempo]})${dayChip(days.tempo)}</div><div class="big" style="color:var(--warn);">${b.tempo} mi</div><div class="small">Zone 3–4 · comfortably hard, sustained</div></div>`
+      + `<div class="card" style="margin:0; border-color:var(--accent2);"><div class="small">LONG RUN (${DAY_NAMES[days.long]})${dayChip(days.long)}</div><div class="big" style="color:var(--accent2);">${b.long} mi</div><div class="small">Zone 2 · easy, conversational</div></div>`
+      + `</div>`;
+  }
+  el.innerHTML = html;
+}
+document.getElementById('saveRunDays').onclick = ()=>{
+  const t = +document.getElementById('tempoDay').value;
+  const l = +document.getElementById('longDay').value;
+  DB.runDays = { tempo: t, long: l };
+  save(); renderRunBreakdown();
+};
+
 function renderRuns(){
   renderZones();
   getWeeklyGoal();
+  renderRunBreakdown();
   const thisWeek = mondayOf(new Date());
   const wkRuns = DB.runs.filter(r=>mondayOf(r.date)===thisWeek);
   const wkMiles = wkRuns.reduce((a,r)=>a+ +r.miles + (+r.extra||0), 0);
@@ -887,6 +947,7 @@ document.getElementById('saveRun').onclick=()=>{
   renderRuns();
 };
 if(DB.age) document.getElementById('sAge').value=DB.age;
+if(DB.runDays){ document.getElementById('tempoDay').value=DB.runDays.tempo; document.getElementById('longDay').value=DB.runDays.long; }
 document.getElementById('saveAge').onclick=()=>{ DB.age=+document.getElementById('sAge').value||null; save(); renderRuns(); };
 document.getElementById('exportBtn').onclick=()=>{
   const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
