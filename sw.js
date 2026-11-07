@@ -1,4 +1,4 @@
-const CACHE = 'apex-fit-v4';
+const CACHE = 'apex-fit-v5';
 const ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
