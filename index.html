@@ -42,6 +42,7 @@
   .btn.xsm{padding:3px 8px; font-size:.75rem;}
   .rec{background:#0d2818; border:1px solid var(--accent); border-radius:8px; padding:8px 10px; font-size:.8rem; margin-top:6px; color:#7ee787;}
   .rec.warn{background:#2d2208; border-color:var(--warn); color:#e3b341;}
+  .rec.down{background:#2d1a18; border-color:var(--bad); color:#ff9c97;}
   .row{display:flex; gap:8px; align-items:end; flex-wrap:wrap;}
   .row>div{flex:1; min-width:110px;}
   label{display:block; font-size:.75rem; color:var(--muted); margin-bottom:3px;}
@@ -78,6 +79,15 @@
   details{margin-top:8px;}
   summary{cursor:pointer; font-size:.8rem; color:var(--accent2);}
 
+  /* ---------- Confidence picker ---------- */
+  .conf-row{display:flex; gap:8px; margin-top:10px; align-items:center; flex-wrap:wrap;}
+  .conf-row .lbl{font-size:.75rem; color:var(--muted);}
+  .conf-btn{flex:1; min-width:90px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#21262d; color:var(--text); cursor:pointer; font-size:.8rem; font-weight:600;}
+  .conf-btn.on[data-c="easy"]{background:#0d2818; border-color:var(--accent); color:#7ee787;}
+  .conf-btn.on[data-c="solid"]{background:#0d1f3d; border-color:var(--accent2); color:#79b8ff;}
+  .conf-btn.on[data-c="hard"]{background:#2d2208; border-color:var(--warn); color:#e3b341;}
+  .conf-btn.on[data-c="failed"]{background:#2d1a18; border-color:var(--bad); color:#ff9c97;}
+
   /* ---------- Mobile (phones) ---------- */
   @media (max-width: 640px){
     body{padding:12px 10px 90px; max-width:100%;}
@@ -101,6 +111,7 @@
     .btn.xsm{padding:6px 10px; font-size:.85rem;}
     .day-pick button{padding:10px 14px; font-size:.95rem;}
     .setrow input{width:88px; padding:10px 8px;}
+    .conf-btn{padding:12px 10px; font-size:.9rem;}
 
     .card{padding:12px; margin-bottom:10px;}
     .row{flex-direction:column; align-items:stretch; gap:10px;}
@@ -122,7 +133,7 @@
 </head>
 <body>
 <h1>APEX <span>FITNESS</span></h1>
-<div class="sub">Lift tracker + progressive overload · Progress view · Custom routines & supersets · Run log</div>
+<div class="sub">Lift tracker + progressive overload · Rep ranges & confidence scoring · Custom routines & supersets · Run log</div>
 
 <div class="tabs">
   <div class="tab active" data-t="today">Today</div>
@@ -180,10 +191,17 @@
       <div><label>Type</label>
         <select id="exType"><option value="compound">Compound</option><option value="isolation">Isolation</option></select>
       </div>
+      <div><label>Rep range (min–max)</label>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="number" id="exRepMin" min="1" max="30" value="8" style="width:60px;">
+          <span class="small">–</span>
+          <input type="number" id="exRepMax" min="1" max="30" value="12" style="width:60px;">
+        </div>
+      </div>
       <div><label>Superset # (0 = none)</label><input type="number" id="exSS" min="0" value="0"></div>
       <div style="flex:0"><label>&nbsp;</label><button class="btn sm" id="addEx">Add exercise</button></div>
     </div>
-    <div class="small" style="margin-top:6px;">Give two exercises the same superset number (1, 2, 3…) to pair them. Type decides the overload rule: compounds add weight, isolations add reps first.</div>
+    <div class="small" style="margin-top:6px;">Rep range drives the progression: stay in range and add reps; hit the top with confidence and the app bumps weight and drops you back to the bottom of the range. Same superset # pairs exercises.</div>
   </div>
 </div>
 
@@ -283,65 +301,65 @@
 </div>
 
 <script>
+// ---------------- Default rep ranges by exercise type ----------------
+// compound = 6-10, isolation = 10-15 (classic hypertrophy ranges)
+function defaultRange(type){ return type==='isolation' ? {min:10, max:15} : {min:6, max:10}; }
+
 // ---------------- Default program ----------------
 const DEFAULT_ROUTINES = [
   {name:"Push (Mon)", exercises:[
-    {name:"Barbell Bench Press", type:"compound", ss:0},
-    {name:"Incline Dumbbell Press", type:"compound", ss:0},
-    {name:"Seated Overhead Press", type:"compound", ss:0},
-    {name:"Cable Lateral Raise", type:"isolation", ss:1},
-    {name:"Tricep Pushdown", type:"isolation", ss:1},
-    {name:"Overhead Tricep Extension", type:"isolation", ss:0}]},
+    {name:"Barbell Bench Press", type:"compound", ss:0, repMin:6, repMax:10},
+    {name:"Incline Dumbbell Press", type:"compound", ss:0, repMin:6, repMax:10},
+    {name:"Seated Overhead Press", type:"compound", ss:0, repMin:6, repMax:10},
+    {name:"Cable Lateral Raise", type:"isolation", ss:1, repMin:10, repMax:15},
+    {name:"Tricep Pushdown", type:"isolation", ss:1, repMin:10, repMax:15},
+    {name:"Overhead Tricep Extension", type:"isolation", ss:0, repMin:10, repMax:15}]},
   {name:"Pull (Tue)", exercises:[
-    {name:"Pull-ups", type:"compound", ss:0},
-    {name:"Barbell Bent-Over Row", type:"compound", ss:0},
-    {name:"Seated Cable Row", type:"compound", ss:0},
-    {name:"Lat Pulldown (wide)", type:"compound", ss:0},
-    {name:"Face Pulls", type:"isolation", ss:1},
-    {name:"Barbell Curl", type:"isolation", ss:2},
-    {name:"Hammer Curl", type:"isolation", ss:2}]},
+    {name:"Pull-ups", type:"compound", ss:0, repMin:3, repMax:10},
+    {name:"Barbell Bent-Over Row", type:"compound", ss:0, repMin:6, repMax:10},
+    {name:"Seated Cable Row", type:"compound", ss:0, repMin:8, repMax:12},
+    {name:"Lat Pulldown (wide)", type:"compound", ss:0, repMin:8, repMax:12},
+    {name:"Face Pulls", type:"isolation", ss:1, repMin:12, repMax:20},
+    {name:"Barbell Curl", type:"isolation", ss:2, repMin:8, repMax:12},
+    {name:"Hammer Curl", type:"isolation", ss:2, repMin:8, repMax:12}]},
   {name:"Legs (Thu)", exercises:[
-    {name:"Barbell Back Squat", type:"compound", ss:0},
-    {name:"Romanian Deadlift", type:"compound", ss:0},
-    {name:"Leg Press", type:"compound", ss:0},
-    {name:"Walking Lunges", type:"compound", ss:0},
-    {name:"Leg Curl", type:"isolation", ss:1},
-    {name:"Standing Calf Raise", type:"isolation", ss:1}]},
+    {name:"Barbell Back Squat", type:"compound", ss:0, repMin:5, repMax:8},
+    {name:"Romanian Deadlift", type:"compound", ss:0, repMin:6, repMax:10},
+    {name:"Leg Press", type:"compound", ss:0, repMin:8, repMax:12},
+    {name:"Walking Lunges", type:"compound", ss:0, repMin:8, repMax:12},
+    {name:"Leg Curl", type:"isolation", ss:1, repMin:10, repMax:15},
+    {name:"Standing Calf Raise", type:"isolation", ss:1, repMin:10, repMax:15}]},
   {name:"Upper (Fri)", exercises:[
-    {name:"Incline Barbell Press", type:"compound", ss:0},
-    {name:"Dumbbell Row (single arm)", type:"compound", ss:0},
-    {name:"Arnold Press", type:"compound", ss:0},
-    {name:"Cable Fly", type:"isolation", ss:1},
-    {name:"EZ Bar Curl", type:"isolation", ss:2},
-    {name:"Skull Crushers", type:"isolation", ss:2},
-    {name:"Reverse Curl", type:"isolation", ss:0}]}
+    {name:"Incline Barbell Press", type:"compound", ss:0, repMin:6, repMax:10},
+    {name:"Dumbbell Row (single arm)", type:"compound", ss:0, repMin:8, repMax:12},
+    {name:"Arnold Press", type:"compound", ss:0, repMin:8, repMax:12},
+    {name:"Cable Fly", type:"isolation", ss:1, repMin:10, repMax:15},
+    {name:"EZ Bar Curl", type:"isolation", ss:2, repMin:8, repMax:12},
+    {name:"Skull Crushers", type:"isolation", ss:2, repMin:8, repMax:12},
+    {name:"Reverse Curl", type:"isolation", ss:0, repMin:10, repMax:15}]}
 ];
 
-const REP_CEILING = 12;
 const LOWER_BODY = ["Squat","Deadlift","Row","Leg Press","Lunges"];
 
 let DB = JSON.parse(localStorage.getItem('apexFit') || 'null') || {lifts:{}, runs:[], age:null, goalMiles:6, routines:null, mileagePlan:null};
 if(!DB.routines){ DB.routines = JSON.parse(JSON.stringify(DEFAULT_ROUTINES)); }
+// backfill rep ranges for routines saved before this feature
+DB.routines.forEach(r=>r.exercises.forEach(e=>{
+  if(e.repMin==null || e.repMax==null){ const d=defaultRange(e.type); e.repMin=d.min; e.repMax=d.max; }
+}));
 
 // ---------- Mileage progression plan ----------
-// Standard base-building: start at 12 mi/week, +10% per week (rounded to 0.5)
 function mondayOf(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); return x.toISOString().slice(0,10); }
 function initMileagePlan(){
   if(DB.mileagePlan) return;
   const monday = mondayOf(new Date());
-  DB.mileagePlan = {
-    startDate: monday,
-    startMiles: 12,
-    currentWeek: 1,
-    weeklyIncrease: 1.2
-  };
+  DB.mileagePlan = { startDate: monday, startMiles: 12, currentWeek: 1, weeklyIncrease: 1.2 };
 }
 function getCurrentWeek(){
   if(!DB.mileagePlan) initMileagePlan();
   const start = new Date(DB.mileagePlan.startDate);
   const now = new Date();
-  const weeksSince = Math.floor((now - start) / (7*24*60*60*1000));
-  return weeksSince + 1;
+  return Math.floor((now - start) / (7*24*60*60*1000)) + 1;
 }
 function getWeeklyGoal(){
   if(!DB.mileagePlan) initMileagePlan();
@@ -370,10 +388,9 @@ function ghCfg(){ try{ return JSON.parse(localStorage.getItem('apexGhCfg')||'{}'
 function ghSetStatus(msg, ok){ const el=document.getElementById('ghStatus'); if(el){ el.textContent=msg; el.style.color = ok? 'var(--accent)' : 'var(--warn)'; } }
 async function ghApi(path, opts){
   const cfg = ghCfg();
-  const res = await fetch('https://api.github.com/repos/'+cfg.repo+'/contents/'+path, Object.assign({
+  return fetch('https://api.github.com/repos/'+cfg.repo+'/contents/'+path, Object.assign({
     headers:{ 'Authorization':'token '+cfg.token, 'Accept':'application/vnd.github.v3+json' }
   }, opts||{}));
-  return res;
 }
 async function ghPush(){
   const cfg = ghCfg();
@@ -382,7 +399,6 @@ async function ghPush(){
   try{
     const data = JSON.stringify(DB, null, 2);
     const b64 = btoa(unescape(encodeURIComponent(data)));
-    // get existing sha (if file exists) so we can update
     let sha = null;
     const get = await ghApi('fitness-data.json');
     if(get.ok){ const j = await get.json(); sha = j.sha; }
@@ -405,6 +421,9 @@ async function ghPull(){
     const data = JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,'')))));
     DB = data;
     if(!DB.routines){ DB.routines = JSON.parse(JSON.stringify(DEFAULT_ROUTINES)); }
+    DB.routines.forEach(r=>r.exercises.forEach(e=>{
+      if(e.repMin==null || e.repMax==null){ const d=defaultRange(e.type); e.repMin=d.min; e.repMax=d.max; }
+    }));
     save();
     ghSetStatus('Pulled ✓ '+new Date().toLocaleTimeString(), true);
     setTimeout(()=>location.reload(), 800);
@@ -413,8 +432,8 @@ async function ghPull(){
 
 // ---------- One-time seed: Commander's first sessions ----------
 const SEED = {
-  "Barbell Bench Press": [{date:"2026-11-06", sets:[{weight:165,reps:6},{weight:165,reps:4},{weight:165,reps:3}]}],
-  "Barbell Back Squat":   [{date:"2026-11-06", sets:[{weight:145,reps:8},{weight:145,reps:8},{weight:145,reps:8}]}]
+  "Barbell Bench Press": [{date:"2026-11-06", confidence:"solid", sets:[{weight:165,reps:6},{weight:165,reps:4},{weight:165,reps:3}]}],
+  "Barbell Back Squat":   [{date:"2026-11-06", confidence:"solid", sets:[{weight:145,reps:8},{weight:145,reps:8},{weight:145,reps:8}]}]
 };
 Object.keys(SEED).forEach(ex=>{ if(!DB.lifts[ex] || !DB.lifts[ex].length){ DB.lifts[ex] = SEED[ex]; } });
 save();
@@ -430,13 +449,15 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 });
 
 // ---------- Helpers ----------
-function exType(name){
+function exDef(name){
   for(const r of DB.routines){
     const e = r.exercises.find(x=>x.name===name);
-    if(e) return e.type;
+    if(e) return e;
   }
-  return 'compound';
+  return {name, type:'compound', ss:0, repMin:6, repMax:10};
 }
+function exType(name){ return exDef(name).type; }
+function repRangeOf(name){ const e=exDef(name); return {min:+e.repMin||6, max:+e.repMax||10}; }
 function lastSession(ex){
   const h = DB.lifts[ex];
   return h && h.length ? h[h.length-1] : null;
@@ -444,29 +465,56 @@ function lastSession(ex){
 function topSet(sets){
   return sets.reduce((a,s)=> (+s.weight>+a.weight || (+s.weight===+a.weight && +s.reps>+a.reps)) ? s : a, sets[0]);
 }
-function volOf(s){ return +s.weight * (s.reps ? +s.reps : 1); } // pull-ups: weight 0 → count reps
+function volOf(s){ return +s.weight * (s.reps ? +s.reps : 1); }
 
-// ---------- Recommendation engine ----------
-function recommend(ex, sets){
-  const type = exType(ex);
-  const isLower = LOWER_BODY.some(k=>ex.includes(k));
+// ---------- Progression formula ----------
+// Decision:
+//   hit top of rep range on ALL working sets + confidence easy/solid -> GO UP in weight, restart at bottom of range
+//   hit top of range but confidence hard                                  -> STAY at weight, add reps is capped, so repeat
+//   confidence failed                                                      -> GO DOWN ~5-10%
+//   otherwise                                                              -> STAY at weight, ADD REPS toward the top of range
+function decideProgression(exName, sets, confidence){
+  const range = repRangeOf(exName);
+  const type = exType(exName);
+  const isLower = LOWER_BODY.some(k=>exName.includes(k));
   const inc = type==='compound' ? (isLower ? 10 : 5) : 5;
   const top = topSet(sets);
   const topW = +top.weight, topR = +top.reps;
-  const allSameW = sets.filter(s=>+s.weight===topW);
-  const dropped = allSameW.length>1 && (+allSameW[allSameW.length-1].reps < +allSameW[0].reps - 2);
-  if(ex==="Pull-ups"){
+  const conf = confidence || 'solid';
+
+  // bodyweight exercises (pull-ups): progression = total reps
+  if(topW===0){
     const total = sets.reduce((a,s)=>a+ +s.reps,0);
-    return `<div class="rec">Recommendation: last total was <b>${total} reps</b> over ${sets.length} sets. Next session aim for <b>${total+1}+ total</b> — add a rep anywhere. Toward 23 max: do a fresh max attempt once a week first thing.</div>`;
+    if(conf==='failed') return {action:'down', text:`Total was ${total} reps and it broke down. Next session aim for ${Math.max(1,total-2)} clean reps — leave 1-2 in the tank each set.`};
+    if(conf==='hard')  return {action:'stay', text:`Total ${total} reps felt hard. Repeat ${total} next session until it moves clean, then add.`};
+    return {action:'up', text:`Total ${total} reps${conf==='easy'?' and it felt easy':''}. Aim for ${total+1}+ next session — add a rep anywhere. Toward 23 max: one fresh max attempt a week, first thing.`};
   }
-  if(type==='compound'){
-    if(dropped) return `<div class="rec warn">Recommendation: reps dropped across sets at ${topW} lb. Repeat <b>${topW} lb</b> and match or beat your first-set reps before adding weight.</div>`;
-    return `<div class="rec">Recommendation: add <b>+${inc} lb</b> → try <b>${topW+inc} lb</b> for the same reps next time. (Completed all sets = move up.)</div>`;
+
+  const allHitTop = sets.every(s=>+s.reps >= range.max);
+  const allInRange = sets.every(s=>+s.reps >= range.min);
+
+  if(conf==='failed'){
+    const drop = Math.max(5, Math.round(topW*0.1/5)*5); // ~10% down, rounded to 5 lb
+    return {action:'down', cls:'down', text:`Marked as failed. Drop to <b>${topW-drop} lb</b> and rebuild through the ${range.min}–${range.max} range. A failed session is data, not a lost week.`};
   }
-  if(topR >= REP_CEILING){
-    return `<div class="rec">Recommendation: you hit ${topR} reps — top of the range. Add <b>+${inc} lb</b> → <b>${topW+inc} lb</b> next time, back to 8 reps.</div>`;
+  if(allHitTop && (conf==='easy' || conf==='solid')){
+    return {action:'up', text:`Top of the ${range.min}–${range.max} range on every set${conf==='easy'?' — and it felt easy':''}. Go up <b>+${inc} lb → ${topW+inc} lb</b> next session, starting back at ${range.min} reps.`};
   }
-  return `<div class="rec">Recommendation: keep <b>${topW} lb</b> and push for <b>${topR+1}–${REP_CEILING} reps</b> next time.</div>`;
+  if(allHitTop && conf==='hard'){
+    return {action:'stay', cls:'warn', text:`You hit ${range.max} reps but it felt hard. Repeat <b>${topW} lb</b> next session — own the top of the range before the weight goes up.`};
+  }
+  if(conf==='easy' && allInRange){
+    return {action:'up', text:`All sets in range and it felt easy. Go up <b>+${inc} lb → ${topW+inc} lb</b> next session at ${range.min}–${range.min+2} reps.`};
+  }
+  // default: stay, add reps
+  const nextRep = Math.min(range.max, topR+1);
+  return {action:'stay', text:`Stay at <b>${topW} lb</b> and push for <b>${nextRep}–${range.max} reps</b> next time. You're ${range.max-topR} rep${range.max-topR===1?'':'s'} from a weight bump.`};
+}
+function recommend(ex, sets, confidence){
+  const d = decideProgression(ex, sets, confidence);
+  const cls = d.cls ? ' '+d.cls : '';
+  const tag = d.action==='up' ? '⬆ GO UP' : d.action==='down' ? '⬇ GO DOWN' : '⏸ STAY';
+  return `<div class="rec${cls}"><b>${tag}</b> — ${d.text}</div>`;
 }
 
 // ---------- Lifts tab ----------
@@ -485,15 +533,24 @@ function renderDayPick(){
 function exerciseCard(ex){
   const card = document.createElement('div'); card.className='card';
   const last = lastSession(ex.name);
+  const range = repRangeOf(ex.name);
   let histHtml = '<div class="hist">No history yet — first session sets the baseline.</div>';
   let recHtml = '';
   if(last){
     const setsTxt = last.sets.map(s=> ex.name==="Pull-ups" ? `${s.reps}` : `${s.weight}lb × ${s.reps}`).join(' · ');
-    histHtml = `<div class="hist">Last time (${last.date}): ${setsTxt}</div>`;
-    recHtml = recommend(ex.name, last.sets);
+    const confTxt = last.confidence ? ` · felt <b>${last.confidence}</b>` : '';
+    histHtml = `<div class="hist">Last time (${last.date}): ${setsTxt}${confTxt}</div>`;
+    recHtml = recommend(ex.name, last.sets, last.confidence);
   }
-  card.innerHTML = `<h3>${ex.name} <span class="chip">${ex.type}</span></h3>${histHtml}
+  card.innerHTML = `<h3>${ex.name} <span class="chip">${ex.type}</span> <span class="chip">${range.min}–${range.max} reps</span></h3>${histHtml}
     <div class="sets"></div>
+    <div class="conf-row">
+      <span class="lbl">How did it feel?</span>
+      <button class="conf-btn" data-c="easy">Easy</button>
+      <button class="conf-btn on" data-c="solid">Solid</button>
+      <button class="conf-btn" data-c="hard">Hard</button>
+      <button class="conf-btn" data-c="failed">Failed</button>
+    </div>
     <div style="margin-top:8px;">
       <button class="btn sm sec addset">+ set</button>
       <button class="btn sm log">Log it</button>
@@ -506,13 +563,18 @@ function exerciseCard(ex){
     setsDiv.appendChild(row);
   }
   if(last){ last.sets.forEach(s=>addSet(s.weight,s.reps)); } else { addSet(); addSet(); addSet(); }
+  card.querySelectorAll('.conf-btn').forEach(b=>b.onclick=()=>{
+    card.querySelectorAll('.conf-btn').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+  });
   card.querySelector('.addset').onclick=()=>addSet();
   card.querySelector('.log').onclick=()=>{
     const rows=[...setsDiv.querySelectorAll('.setrow')];
     const sets=rows.map(r=>({weight:+r.children[1].value||0, reps:+r.children[3].value||0})).filter(s=>s.reps>0);
     if(!sets.length){ alert('Enter at least one set.'); return; }
+    const confidence = card.querySelector('.conf-btn.on').dataset.c;
     DB.lifts[ex.name]=DB.lifts[ex.name]||[];
-    DB.lifts[ex.name].push({date:new Date().toISOString().slice(0,10), sets});
+    DB.lifts[ex.name].push({date:new Date().toISOString().slice(0,10), confidence, sets});
     save(); renderDay(activeDay);
   };
   return card;
@@ -540,7 +602,6 @@ function renderDay(day){
 }
 
 // ---------- Today tab ----------
-// Weekly schedule: weekday number (0=Sun) -> routine name or run plan
 const WEEK_SCHEDULE = {
   0:{type:'rest'},
   1:{type:'lift', routine:'Push (Mon)'},
@@ -553,7 +614,7 @@ const WEEK_SCHEDULE = {
 function targetFor(ex){
   const last = lastSession(ex.name);
   if(!last) return null;
-  return recommend(ex.name, last.sets);
+  return recommend(ex.name, last.sets, last.confidence);
 }
 function renderToday(){
   const area = document.getElementById('todayArea');
@@ -573,15 +634,16 @@ function renderToday(){
     if(!routine){
       html += `<div class="hist">Today's routine "${plan.routine}" isn't in your routines list. Check the Routines tab.</div></div>`;
     } else {
-      html += `<div class="hist"><b>Today's workout: ${routine.name}</b> — ${routine.exercises.length} exercises. Targets below come from your last logged session.</div></div>`;
+      html += `<div class="hist"><b>Today's workout: ${routine.name}</b> — ${routine.exercises.length} exercises. Targets below come from your last logged session and how confident it felt.</div></div>`;
       routine.exercises.forEach(ex=>{
         const last = lastSession(ex.name);
         const rec = targetFor(ex);
+        const range = repRangeOf(ex.name);
         const lastTxt = last
-          ? last.sets.map(s=> ex.name==="Pull-ups" ? `${s.reps}` : `${s.weight}lb × ${s.reps}`).join(' · ')
+          ? last.sets.map(s=> ex.name==="Pull-ups" ? `${s.reps}` : `${s.weight}lb × ${s.reps}`).join(' · ') + (last.confidence?` · felt ${last.confidence}`:'')
           : 'no history yet';
         html += `<div class="card">
-          <h3>${ex.name} ${ex.ss>0?`<span class="chip" style="color:var(--ss);border-color:var(--ss);">superset ${ex.ss}</span>`:''}</h3>
+          <h3>${ex.name} ${ex.ss>0?`<span class="chip" style="color:var(--ss);border-color:var(--ss);">superset ${ex.ss}</span>`:''} <span class="chip">${range.min}–${range.max} reps</span></h3>
           <div class="hist">Last time: ${lastTxt}</div>
           ${rec || '<div class="rec warn">First session — set your baseline, then targets appear here.</div>'}
         </div>`;
@@ -611,7 +673,8 @@ function renderProgress(){
     const sessions = hist.map((h,i)=>{
       const t=topSet(h.sets);
       const tTxt = ex==="Pull-ups" ? `best ${t.reps} reps` : `top ${t.weight}lb × ${t.reps}`;
-      return `<div class="sess"><b>${h.date}</b> — ${tTxt} · ${h.sets.map(s=> ex==="Pull-ups" ? s.reps : `${s.weight}×${s.reps}`).join(' · ')}</div>`;
+      const confTxt = h.confidence ? ` · ${h.confidence}` : '';
+      return `<div class="sess"><b>${h.date}</b> — ${tTxt}${confTxt} · ${h.sets.map(s=> ex==="Pull-ups" ? s.reps : `${s.weight}×${s.reps}`).join(' · ')}</div>`;
     }).join('');
     div.innerHTML=`<h4>${ex} ${chip}</h4>
       <div class="small">${hist.length} session${hist.length>1?'s':''} logged</div>
@@ -628,7 +691,7 @@ function renderRoutines(){
   DB.routines.forEach((r,ri)=>{
     const div=document.createElement('div'); div.className='rtn';
     const exTxt = r.exercises.map((e,ei)=>
-      `${e.name}${e.ss>0?` <span class="chip">SS${e.ss}</span>`:''} <button class="btn xsm del exdel" data-r="${ri}" data-e="${ei}">×</button>`
+      `${e.name} <span class="chip">${e.repMin}–${e.repMax}</span>${e.ss>0?` <span class="chip">SS${e.ss}</span>`:''} <button class="btn xsm del exdel" data-r="${ri}" data-e="${ei}">×</button>`
     ).join(' · ');
     div.innerHTML=`<div><b>${r.name}</b> <span class="small">(${r.exercises.length} exercises)</span><div class="small" style="margin-top:4px;">${exTxt||'<i>empty</i>'}</div></div>
       <div class="acts">
@@ -668,10 +731,13 @@ document.getElementById('addEx').onclick=()=>{
   const name=document.getElementById('exName').value.trim();
   const type=document.getElementById('exType').value;
   const ss=+document.getElementById('exSS').value||0;
+  let repMin=+document.getElementById('exRepMin').value||defaultRange(type).min;
+  let repMax=+document.getElementById('exRepMax').value||defaultRange(type).max;
+  if(repMax<repMin){ const t=repMin; repMin=repMax; repMax=t; }
   if(!name){ alert('Name the exercise.'); return; }
   const r=DB.routines.find(x=>x.name===rName);
   if(r.exercises.some(e=>e.name===name)){ alert('Already in this routine.'); return; }
-  r.exercises.push({name, type, ss});
+  r.exercises.push({name, type, ss, repMin, repMax});
   document.getElementById('exName').value=''; document.getElementById('exSS').value=0;
   save(); renderRoutines(); renderDayPick();
   if(activeDay===rName) renderDay(activeDay);
@@ -773,6 +839,9 @@ document.getElementById('importFile').onchange=(e)=>{
       if(!d.lifts&&!d.runs) throw new Error('bad file');
       DB=Object.assign({lifts:{},runs:[],age:null,goalMiles:6,routines:JSON.parse(JSON.stringify(DEFAULT_ROUTINES)),mileagePlan:null}, d);
       if(!DB.mileagePlan) initMileagePlan();
+      DB.routines.forEach(r2=>r2.exercises.forEach(e2=>{
+        if(e2.repMin==null || e2.repMax==null){ const dd=defaultRange(e2.type); e2.repMin=dd.min; e2.repMax=dd.max; }
+      }));
       save(); renderRuns(); renderRoutines(); renderDayPick(); fillRoutineSelect(); alert('Data imported.');
     }catch(err){ alert('Import failed: not a valid APEX export.'); }
   };
